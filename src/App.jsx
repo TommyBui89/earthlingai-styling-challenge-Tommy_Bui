@@ -1,452 +1,574 @@
 import React, { useState, useEffect, useRef } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import {
-  faPlay,
-  faPause,
-  faForward,
-  faBackward,
-  faHeart,
-  faSearch,
-} from '@fortawesome/free-solid-svg-icons';
+import { faPlay, faPause, faForward, faBackward, faSearch, faVolumeHigh } from '@fortawesome/free-solid-svg-icons';
 
-import logo from './earthlingai_logo.png';
+import logo from './earthlingai_logo.png'
 
-// Color scheme
-const colors = {
-  primary: '#000000',
-  secondary: '#FF3B30',
-  background: '#111111',
-  text: '#FFFFFF',
-  muted: '#888888'
-};
+const float = keyframes`
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+`;
 
-function App() {
-  const [projects, setProjects] = useState([]);
+const rotate = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const gradient = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
+const wave = keyframes`
+  0% { transform: scaleY(1); }
+  50% { transform: scaleY(0.3); }
+  100% { transform: scaleY(1); }
+`;
+
+const DJPlayer = () => {
+  const [tracks, setTracks] = useState([]);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(0.5);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentBackground, setCurrentBackground] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const audioRef = useRef(null);
 
   useEffect(() => {
-    fetch('https://earthlingai.app/download/projects.json')
-      .then(response => response.json())
-      .then(data => {
-        const audioProjects = data.filter(
-          project => project.audio && project.isPublicProject
-        );
-        setProjects(audioProjects);
-        
-        if (audioProjects.length > 0) {
-          audioRef.current = new Audio(audioProjects[0].audio);
-          audioRef.current.volume = volume;
+    const fetchTracks = async () => {
+      try {
+        const response = await fetch('https://earthlingai.app/download/projects.json');
+        if (!response.ok) {
+          throw new Error('Failed to fetch tracks');
         }
-      })
-      .catch(error => console.error('Error fetching data:', error));
-  }, [volume]);
+        const data = await response.json();
+        console.log('First track data:', data[0]);
+        setTracks(data);
+        setIsLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setIsLoading(false);
+      }
+    };
 
-  // Player controls
-  const playAudio = () => {
-    if (!audioRef.current) return;
-    audioRef.current.play().then(() => setIsPlaying(true)).catch(console.error);
-  };
+    fetchTracks();
+  }, []);
 
-  const pauseAudio = () => {
-    if (!audioRef.current) return;
-    audioRef.current.pause();
-    setIsPlaying(false);
+  useEffect(() => {
+    if (tracks.length > 0 && tracks[currentTrackIndex]) {
+      const currentTrack = tracks[currentTrackIndex];
+      console.log('Current track:', currentTrack);
+      
+      if (!currentTrack.audio) {
+        console.error('No audio found for track:', currentTrack);
+        return;
+      }
+
+      if (audioRef.current) {
+        audioRef.current.src = currentTrack.audio;
+        audioRef.current.volume = volume;
+        
+        const playAudio = async () => {
+          try {
+            if (isPlaying) {
+              const playPromise = audioRef.current.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                  console.error('Audio playback error:', error);
+                });
+              }
+            } else {
+              audioRef.current.pause();
+            }
+          } catch (error) {
+            console.error('Audio control error:', error);
+          }
+        };
+
+        playAudio();
+      }
+    }
+  }, [currentTrackIndex, isPlaying, tracks, volume]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.onerror = (e) => {
+        console.error('Audio error:', e);
+        setError('Error loading audio file');
+      };
+    }
+  }, []);
+
+  const filteredTracks = tracks.filter(track => 
+    track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    track.username.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const togglePlay = () => {
+    if (!tracks[currentTrackIndex]?.audio) {
+      console.error('No audio available for current track');
+      return;
+    }
+    setIsPlaying(!isPlaying);
   };
 
   const changeTrack = (index) => {
-    const newIndex = Math.max(0, Math.min(index, projects.length - 1));
-    setCurrentTrackIndex(newIndex);
-    audioRef.current.src = projects[newIndex].audio;
-    if (isPlaying) audioRef.current.play();
+    if (index < 0) {
+      setCurrentTrackIndex(tracks.length - 1);
+    } else if (index >= tracks.length) {
+      setCurrentTrackIndex(0);
+    } else {
+      setCurrentTrackIndex(index);
+    }
   };
 
-  const filteredProjects = projects.filter(project =>
-    project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleVolumeChange = (e) => {
+    setVolume(parseFloat(e.target.value));
+  };
 
-  if (projects.length === 0) return <Loading>Loading projects...</Loading>;
+  useEffect(() => {
+    if (tracks.length > 0) {
+      setCurrentBackground(tracks[currentTrackIndex]?.backgroundImageURL);
+    }
+  }, [currentTrackIndex, tracks]);
 
-  const currentProject = projects[currentTrackIndex];
+  if (isLoading) {
+    return (
+      <Container>
+        <LoadingMessage>Loading tracks...</LoadingMessage>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container>
+        <ErrorMessage>Error: {error}</ErrorMessage>
+      </Container>
+    );
+  }
 
   return (
-    <Layout>
-      <Sidebar>
-        <LogoContainer>
-          <Logo src={logo} alt="EarthlingAI Logo" />
-          EARTHLINGAI
-        </LogoContainer>
-        
-        <SearchContainer>
-          <FontAwesomeIcon icon={faSearch} />
-          <SearchInput
-            placeholder="Search tracks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </SearchContainer>
+    <Container $background={currentBackground}>
+      <audio ref={audioRef} />
+      <GlassPanel>
+        <Sidebar>
+          <Logo>
+            <LogoImage src={logo}/>
+            <LogoText>EarthlingAI</LogoText>
+          </Logo>
 
-        <PlaylistSection>
-          <SectionTitle>YOUR LIBRARY</SectionTitle>
-          {projects.slice(0, 3).map((project, index) => (
-            <PlaylistItem key={index}>
-              <PlaylistCover src={project.mainImageURL} />
-              <PlaylistInfo>
-                <PlaylistName>{project.title}</PlaylistName>
-                <PlaylistCount>{project.likes.toLocaleString()} likes</PlaylistCount>
-              </PlaylistInfo>
-            </PlaylistItem>
-          ))}
-        </PlaylistSection>
-      </Sidebar>
+          <SearchContainer>
+            <FontAwesomeIcon icon={faSearch} />
+            <SearchInput
+              placeholder="Search tracks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </SearchContainer>
 
-      <MainContent>
-        <TrackGrid>
-          <TrackHeader>
-            <div>#</div>
-            <div>Title</div>
-            <div>Creator</div>
-            <div>Likes</div>
-            <div>Rating</div>
-          </TrackHeader>
-          
-          {filteredProjects.map((project, index) => (
-            <TrackItem
-              key={project.id}
-              onClick={() => changeTrack(index)}
-              active={index === currentTrackIndex}
-            >
-              <div>{index + 1}</div>
-              <TrackInfo>
-                <TrackCover src={project.mainImageURL} />
-                <div>
-                  <TrackTitle>{project.title}</TrackTitle>
-                </div>
-              </TrackInfo>
-              <TrackArtist>{project.username}</TrackArtist>
-              <div><HeartIcon icon={faHeart} /> {project.likes.toLocaleString()}</div>
-              <div><Rating>{project.rating.toFixed(1)}</Rating></div>
-            </TrackItem>
-          ))}
-        </TrackGrid>
-      </MainContent>
+          <TrackList>
+            {filteredTracks.map((track, index) => (
+              <TrackItem 
+                key={track.id}
+                onClick={() => changeTrack(index)}
+                $active={index === currentTrackIndex}
+              >
+                <TrackArt src={track.mainImageURL} />
+                <TrackInfo>
+                  <TrackTitle>{track.title}</TrackTitle>
+                  <TrackArtist>{track.username}</TrackArtist>
+                </TrackInfo>
+                <TrackDuration>3:45</TrackDuration>
+              </TrackItem>
+            ))}
+          </TrackList>
+        </Sidebar>
 
-      <PlayerContainer>
-        <NowPlaying>
-          <AlbumArt src={currentProject.mainImageURL} />
-          <TrackDetails>
-            <TrackTitle>{currentProject.title}</TrackTitle>
-            <Artist>{currentProject.username}</Artist>
-          </TrackDetails>
-        </NowPlaying>
+        <MainContent>
+          <VisualizerContainer>
+            <AnimatedDisk $isPlaying={isPlaying}>
+              <DiskImage src={tracks[currentTrackIndex]?.mainImageURL} />
+              <DiskOverlay />
+            </AnimatedDisk>
 
-        <PlayerControls>
-          <ControlButton onClick={() => changeTrack(currentTrackIndex - 1)}>
-            <FontAwesomeIcon icon={faBackward} />
-          </ControlButton>
-          <PlayButton onClick={isPlaying ? pauseAudio : playAudio}>
-            <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} />
-          </PlayButton>
-          <ControlButton onClick={() => changeTrack(currentTrackIndex + 1)}>
-            <FontAwesomeIcon icon={faForward} />
-          </ControlButton>
-        </PlayerControls>
+            <TrackDetails>
+              <TrackTitle>{tracks[currentTrackIndex]?.title}</TrackTitle>
+              <TrackArtist>{tracks[currentTrackIndex]?.username}</TrackArtist>
+              <TrackStats>
+                <StatItem>
+                  <StatValue>{tracks[currentTrackIndex]?.likes?.toLocaleString()}</StatValue>
+                  <StatLabel>Likes</StatLabel>
+                </StatItem>
+                <StatItem>
+                  <StatValue>{tracks[currentTrackIndex]?.rating?.toFixed(1)}</StatValue>
+                  <StatLabel>Rating</StatLabel>
+                </StatItem>
+              </TrackStats>
+            </TrackDetails>
+          </VisualizerContainer>
 
-        <VolumeControl>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={volume}
-            onChange={(e) => {
-              const newVolume = parseFloat(e.target.value);
-              setVolume(newVolume);
-              audioRef.current.volume = newVolume;
-            }}
-          />
-        </VolumeControl>
-      </PlayerContainer>
-    </Layout>
+          <ControlsContainer>
+            <ControlButton onClick={() => changeTrack(currentTrackIndex - 1)}>
+              <FontAwesomeIcon icon={faBackward} />
+            </ControlButton>
+            
+            <PlayButton onClick={togglePlay} $isPlaying={isPlaying}>
+              {isPlaying ? <FontAwesomeIcon icon={faPause} /> : <FontAwesomeIcon icon={faPlay} />}
+            </PlayButton>
+            
+            <ControlButton onClick={() => changeTrack(currentTrackIndex + 1)}>
+              <FontAwesomeIcon icon={faForward} />
+            </ControlButton>
+            
+            <VolumeControl>
+              <FontAwesomeIcon icon={faVolumeHigh} />
+              <VolumeSlider
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={volume}
+                onChange={handleVolumeChange}
+              />
+            </VolumeControl>
+          </ControlsContainer>
+
+          <WaveVisualizer>
+            {[...Array(24)].map((_, i) => (
+              <WaveBar key={i} $isPlaying={isPlaying} />
+            ))}
+          </WaveVisualizer>
+        </MainContent>
+      </GlassPanel>
+    </Container>
   );
-}
+};
 
-// Styled components with UI/UX best practices
-const Layout = styled.div`
-  display: grid;
+const Container = styled.div`
   height: 100vh;
-  grid-template-columns: 300px 1fr;
-  grid-template-rows: 1fr auto;
-  background: ${colors.primary};
-  color: ${colors.text};
+  background: ${props => props.$background ? `url(${props.$background})` : 'linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)'};
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const GlassPanel = styled.div`
+  width: 90%;
+  max-width: 1200px;
+  height: 90vh;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  display: flex;
+  position: relative;
+  overflow: hidden;
 `;
 
 const Sidebar = styled.div`
+  width: 350px;
+  padding: 2rem;
   display: flex;
   flex-direction: column;
-  background: ${colors.background};
-  padding: 2rem;
-  border-right: 1px solid ${colors.secondary}33;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  height: 100%;
 `;
 
-const LogoContainer = styled.div`
+const Logo = styled.div`
   display: flex;
   align-items: center;
+  gap: 1rem;
   margin-bottom: 2rem;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: ${colors.secondary};
 `;
 
-const Logo = styled.img`
-  width: 50px;
-  height: 50px;
+const LogoImage = styled.img`
+  width: 40px;
+  height: 40px;
+  animation: ${rotate} 3s linear infinite;
+  animation-play-state: ${props => props.$isPlaying ? 'running' : 'paused'};
+`;
+
+const LogoText = styled.span`
+  font-size: 1.8rem;
+  font-weight: 700;
+  background: linear-gradient(45deg, #fff, #aaa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+`;
+
+const TrackList = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 10px;
+  margin-top: 2rem;
+  max-height: calc(90vh - 180px); /* Adjust based on Logo and SearchContainer height */
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
+`;
+
+const TrackItem = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-bottom: 0.5rem;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  ${props => props.$active && css`
+    background: rgba(255, 255, 255, 0.15);
+  `}
+`;
+
+const TrackArt = styled.img`
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   margin-right: 1rem;
+`;
+
+const MainContent = styled.div`
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: -webkit-fill-available;
+`;
+
+const VisualizerContainer = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3rem;
+  margin-bottom: 2rem;
+`;
+
+const AnimatedDisk = styled.div`
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  position: relative;
+  animation: ${rotate} 20s linear infinite;
+  animation-play-state: ${props => props.$isPlaying ? 'running' : 'paused'};
+`;
+
+const DiskImage = styled.img`
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+`;
+
+const DiskOverlay = styled.div`
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1));
+`;
+
+const WaveVisualizer = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  height: 100px;
+  align-items: flex-end;
+`;
+
+const WaveBar = styled.div`
+  width: 4px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  margin: 0 2px;
+  border-radius: 2px;
+  animation: ${wave} 1.2s ease infinite;
+  animation-play-state: ${props => props.$isPlaying ? 'running' : 'paused'};
 `;
 
 const SearchContainer = styled.div`
   display: flex;
   align-items: center;
-  background: ${colors.primary};
-  border-radius: 8px;
-  padding: 0.8rem 1rem;
-  margin-bottom: 2rem;
-  gap: 0.8rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.6);
 `;
 
 const SearchInput = styled.input`
   background: none;
   border: none;
-  color: ${colors.text};
+  color: white;
   width: 100%;
+  outline: none;
   font-size: 0.9rem;
-  
+
   &::placeholder {
-    color: ${colors.muted};
-  }
-`;
-
-const PlaylistSection = styled.div`
-  margin-top: auto;
-`;
-
-const SectionTitle = styled.h3`
-  color: ${colors.muted};
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 1.5rem;
-`;
-
-const PlaylistItem = styled.div`
-  display: flex;
-  align-items: center;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  gap: 1rem;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  
-  &:hover {
-    background: ${colors.secondary}15;
-  }
-`;
-
-const PlaylistCover = styled.img`
-  width: 50px;
-  height: 50px;
-  border-radius: 4px;
-  object-fit: cover;
-`;
-
-const PlaylistInfo = styled.div`
-  flex: 1;
-`;
-
-const PlaylistName = styled.div`
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-`;
-
-const PlaylistCount = styled.div`
-  color: ${colors.muted};
-  font-size: 0.8rem;
-`;
-
-const MainContent = styled.main`
-  padding: 2rem;
-  overflow-y: auto;
-`;
-
-const TrackGrid = styled.div`
-  display: grid;
-  grid-template-columns: 50px 3fr 2fr 1fr 1fr;
-  gap: 1rem;
-`;
-
-const TrackHeader = styled.div`
-  display: contents;
-  color: ${colors.muted};
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid ${colors.secondary}33;
-  
-  > div {
-    padding: 0.5rem 1rem;
-  }
-`;
-
-const TrackItem = styled.div`
-  display: contents;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  
-  > div {
-    padding: 1rem;
-    display: flex;
-    align-items: center;
-    border-radius: 8px;
-    background: ${({ active }) => active ? `${colors.secondary}15` : 'transparent'};
-  }
-
-  &:hover > div {
-    background: ${colors.secondary}10;
+    color: rgba(255, 255, 255, 0.4);
   }
 `;
 
 const TrackInfo = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-`;
-
-const TrackCover = styled.img`
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  object-fit: cover;
-`;
-
-const TrackTitle = styled.div`
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-`;
-
-const TrackArtist = styled.div`
-  color: ${colors.muted};
-  font-size: 0.9rem;
-`;
-
-const HeartIcon = styled(FontAwesomeIcon)`
-  color: ${colors.secondary};
-  margin-right: 0.5rem;
-`;
-
-const Rating = styled.div`
-  padding: 0.25rem 0.75rem;
-  background: ${colors.secondary}15;
-  border-radius: 20px;
-  font-weight: 500;
-`;
-
-const PlayerContainer = styled.div`
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 2rem;
-  background: ${colors.background};
-  border-top: 1px solid ${colors.secondary}33;
-`;
-
-const NowPlaying = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
   flex: 1;
+  display: flex;
+  flex-direction: column;
 `;
 
-const AlbumArt = styled.img`
-  width: 50px;
-  height: 50px;
-  border-radius: 4px;
-  object-fit: cover;
+const TrackTitle = styled.span`
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+`;
+
+const TrackArtist = styled.span`
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+`;
+
+const TrackDuration = styled.span`
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.8rem;
 `;
 
 const TrackDetails = styled.div`
-  min-width: 200px;
-`;
-
-const Artist = styled.div`
-  color: ${colors.muted};
-  font-size: 0.9rem;
-`;
-
-const PlayerControls = styled.div`
-  flex: 1;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+`;
+
+const TrackStats = styled.div`
+  display: flex;
+  gap: 2rem;
+  margin-top: 1rem;
+`;
+
+const StatItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+`;
+
+const StatValue = styled.span`
+  color: white;
+  font-size: 1.2rem;
+  font-weight: 600;
+`;
+
+const StatLabel = styled.span`
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+`;
+
+const ControlsContainer = styled.div`
+  display: flex;
+  align-items: center;
   justify-content: center;
   gap: 2rem;
+  margin: 2rem 0;
 `;
 
 const ControlButton = styled.button`
   background: none;
   border: none;
-  color: ${colors.text};
+  color: white;
   font-size: 1.2rem;
-  padding: 0.5rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  
+  transition: transform 0.2s ease;
+
   &:hover {
-    color: ${colors.secondary};
-    transform: scale(1.1);
+    transform: scale(1.2);
   }
 `;
 
 const PlayButton = styled(ControlButton)`
-  font-size: 1.5rem;
-  padding: 0.5rem 1rem;
-  background: ${colors.secondary};
-  color: ${colors.primary};
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  width: 45px;
-  height: 45px;
+  background: ${props => props.$isPlaying ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'};
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.5rem;
+  transition: all 0.2s ease;
   
   &:hover {
-    transform: scale(1.05);
-    filter: brightness(1.1);
+    transform: scale(1.2);
+    background: rgba(255, 255, 255, 0.25);
   }
 `;
 
 const VolumeControl = styled.div`
-  flex: 1;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  color: white;
+`;
+
+const VolumeSlider = styled.input`
+  -webkit-appearance: none;
+  width: 100px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
   
-  input {
-    width: 120px;
-    accent-color: ${colors.secondary};
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
   }
 `;
 
-const Loading = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  color: ${colors.text};
+const LoadingMessage = styled.div`
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  margin-top: 20vh;
 `;
 
-export default App;
+const ErrorMessage = styled.div`
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  margin-top: 20vh;
+`;
+
+export default DJPlayer;
