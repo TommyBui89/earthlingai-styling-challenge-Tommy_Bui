@@ -33,6 +33,7 @@ const DJPlayer = () => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
+  const [isMuted, setIsMuted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentBackground, setCurrentBackground] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -48,8 +49,8 @@ const DJPlayer = () => {
           throw new Error('Failed to fetch tracks');
         }
         const data = await response.json();
-        console.log('First track data:', data[0]);
-        setTracks(data);
+        const publicTracks = data.filter(track => track.isPublicProject);
+        setTracks(publicTracks);
         setIsLoading(false);
       } catch (err) {
         setError(err.message);
@@ -59,6 +60,14 @@ const DJPlayer = () => {
 
     fetchTracks();
   }, []);
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      const newMutedState = !isMuted;
+      setIsMuted(newMutedState);
+      audioRef.current.muted = newMutedState;
+    }
+  };
 
   useEffect(() => {
     if (tracks.length > 0 && tracks[currentTrackIndex]) {
@@ -185,7 +194,6 @@ const DJPlayer = () => {
                   <TrackTitle>{track.title}</TrackTitle>
                   <TrackArtist>{track.username}</TrackArtist>
                 </TrackInfo>
-                <TrackDuration>3:45</TrackDuration>
               </TrackItem>
             ))}
           </TrackList>
@@ -193,14 +201,17 @@ const DJPlayer = () => {
 
         <MainContent>
           <VisualizerContainer>
-            <AnimatedDisk $isPlaying={isPlaying}>
-              <DiskImage src={tracks[currentTrackIndex]?.mainImageURL} />
-              <DiskOverlay />
-            </AnimatedDisk>
+            <DiskContainer>
+              <AnimatedDisk $isPlaying={isPlaying}>
+                <DiskImage src={tracks[currentTrackIndex]?.mainImageURL} />
+                <DiskOverlay />
+              </AnimatedDisk>
+            </DiskContainer>
 
             <TrackDetails>
               <TrackTitle>{tracks[currentTrackIndex]?.title}</TrackTitle>
               <TrackArtist>{tracks[currentTrackIndex]?.username}</TrackArtist>
+              <TrackDescription>{tracks[currentTrackIndex]?.description}</TrackDescription>
               <TrackStats>
                 <StatItem>
                   <StatValue>{tracks[currentTrackIndex]?.likes?.toLocaleString()}</StatValue>
@@ -228,7 +239,9 @@ const DJPlayer = () => {
             </ControlButton>
             
             <VolumeControl>
-              <FontAwesomeIcon icon={faVolumeHigh} />
+              <VolumeButton onClick={toggleMute}>
+                <FontAwesomeIcon icon={faVolumeHigh} style={{ opacity: isMuted ? 0.5 : 1 }} />
+              </VolumeButton>
               <VolumeSlider
                 type="range"
                 min="0"
@@ -368,9 +381,17 @@ const VisualizerContainer = styled.div`
   margin-bottom: 2rem;
 `;
 
+const DiskContainer = styled.div`
+  width: min(40vh, 300px);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
 const AnimatedDisk = styled.div`
-  width: 300px;
-  height: 300px;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   position: relative;
   animation: ${rotate} 20s linear infinite;
@@ -455,17 +476,13 @@ const TrackArtist = styled.span`
   font-size: 0.8rem;
 `;
 
-const TrackDuration = styled.span`
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 0.8rem;
-`;
-
-const TrackDetails = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+const TrackDescription = styled.p`
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  margin: 1rem 0;
+  line-height: 1.4;
   text-align: center;
-  gap: 1rem;
+  max-width: 500px;
 `;
 
 const TrackStats = styled.div`
@@ -490,6 +507,15 @@ const StatValue = styled.span`
 const StatLabel = styled.span`
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.8rem;
+`;
+
+const TrackDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+  max-width: 500px;
 `;
 
 const ControlsContainer = styled.div`
@@ -535,6 +561,10 @@ const VolumeControl = styled.div`
   align-items: center;
   gap: 1rem;
   color: white;
+`;
+
+const VolumeButton = styled(ControlButton)`
+  margin-right: 0.5rem;
 `;
 
 const VolumeSlider = styled.input`
